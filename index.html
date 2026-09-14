@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Bond Web — a shared relationship graph for a D&D campaign. The DM builds the canon web of NPCs, factions, and connections; players will get their own view.">
+  <link rel="icon" href="https://firstmeasurestudio.store/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="16x16" href="https://firstmeasurestudio.store/assets/favicon-16x16.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="https://firstmeasurestudio.store/assets/favicon-32x32.png">
+  <link rel="apple-touch-icon" href="https://firstmeasurestudio.store/assets/apple-touch-icon.png">
+  <link rel="manifest" href="https://firstmeasurestudio.store/site.webmanifest">
+  <meta name="theme-color" content="#0d0b09">
+
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Bond Web — First Measure Studios">
+  <meta property="og:description" content="Bond Web — a shared relationship graph for a D&D campaign. The DM builds the canon web of NPCs, factions, and connections; players will get their own view.">
+  <meta property="og:image" content="https://firstmeasurestudio.store/assets/og-image.png">
+  <meta property="og:url" content="https://nicholasbrownworship.github.io/bonds-web/">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Bond Web — First Measure Studios">
+  <meta name="twitter:description" content="Bond Web — a shared relationship graph for a D&D campaign. The DM builds the canon web of NPCs, factions, and connections; players will get their own view.">
+  <meta name="twitter:image" content="https://firstmeasurestudio.store/assets/og-image.png">
+
+  <title>Bond Web — First Measure Studios</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@300;400;500&family=Barlow+Condensed:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://firstmeasurestudio.store/tools/shared.css">
+  <style>
+    .layout { display: grid; grid-template-columns: 260px 1fr; gap: 48px; }
+    @media (max-width: 900px) { .layout { grid-template-columns: 1fr; gap: 32px; } }
+
+    .campaign-list { display: flex; flex-direction: column; gap: 1px; background: var(--rule); border: 0.5px solid var(--rule); margin-bottom: 16px; }
+    .campaign-item {
+      background: var(--ink); padding: 14px 16px; cursor: pointer;
+      font-family: var(--mono); font-size: 12px; letter-spacing: 0.03em; color: var(--mist);
+      display: flex; justify-content: space-between; align-items: center;
+      transition: background 0.2s, color 0.2s;
+    }
+    .campaign-item:hover { background: var(--ash); color: var(--paper); }
+    .campaign-item.is-selected { background: var(--ash); color: var(--amber-light); }
+    .campaign-item .count { color: var(--ash); font-size: 10px; }
+
+    .btn {
+      font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+      padding: 10px 16px; border-radius: 2px; cursor: pointer;
+      border: 0.5px solid var(--amber-dim); background: transparent; color: var(--amber);
+      transition: color 0.2s, background 0.2s, border-color 0.2s;
+    }
+    .btn:hover { color: var(--ink); background: var(--amber); border-color: var(--amber); }
+    .btn-ghost { border-color: var(--rule); color: var(--mist); }
+    .btn-ghost:hover { color: var(--paper); background: var(--ash); border-color: var(--rule); }
+    .btn-block { width: 100%; }
+    .btn-sm { padding: 7px 12px; font-size: 10px; }
+    .btn[disabled] { opacity: 0.4; cursor: default; pointer-events: none; }
+
+    .campaign-name-input {
+      width: 100%; background: var(--smoke); border: 0.5px solid var(--rule); color: var(--paper);
+      font-family: var(--serif); font-size: 22px; padding: 10px 14px; border-radius: 2px; margin-bottom: 24px;
+    }
+    .campaign-name-input:focus { outline: none; border-color: var(--amber); }
+
+    .tabs { display: flex; gap: 1px; background: var(--rule); border: 0.5px solid var(--rule); margin-bottom: 28px; }
+    .tab {
+      flex: 1; text-align: center; background: var(--ink); padding: 14px;
+      font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--mist); cursor: pointer; transition: color 0.2s, background 0.2s;
+    }
+    .tab.is-active { color: var(--amber-light); background: var(--ash); }
+    .tab:hover { color: var(--amber-light); }
+    .tab .tab-count { color: var(--ash); margin-left: 6px; }
+
+    .entry-list { display: flex; flex-direction: column; gap: 1px; background: var(--rule); border: 0.5px solid var(--rule); margin-bottom: 20px; }
+    .entry-card { background: var(--ink); padding: 22px 24px; }
+    .entry-card.is-archived { opacity: 0.5; }
+
+    .entry-top-row { display: flex; gap: 10px; margin-bottom: 14px; align-items: center; flex-wrap: wrap; }
+    .entry-name-input {
+      flex: 1; min-width: 140px; background: var(--smoke); border: 0.5px solid var(--rule); color: var(--paper);
+      font-family: var(--cond); font-weight: 500; font-size: 16px; padding: 9px 12px; border-radius: 2px;
+    }
+    .entry-name-input:focus { outline: none; border-color: var(--amber); }
+
+    select {
+      background: var(--smoke); border: 0.5px solid var(--rule); color: var(--mist);
+      font-family: var(--mono); font-size: 11px; padding: 9px 10px; border-radius: 2px;
+    }
+    select:focus { outline: none; border-color: var(--amber); }
+
+    .toggle-pill {
+      font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+      padding: 8px 14px; border-radius: 2px; cursor: pointer; border: 0.5px solid; white-space: nowrap;
+    }
+    .toggle-pill.state-a { color: var(--amber-light); border-color: var(--amber-dim); }
+    .toggle-pill.state-b { color: var(--mist); border-color: var(--rule); }
+
+    .check-label {
+      display: flex; align-items: center; gap: 6px;
+      font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mist);
+      cursor: pointer; white-space: nowrap;
+    }
+    .check-label input { accent-color: var(--amber); }
+
+    .entry-remove {
+      background: transparent; border: 0.5px solid var(--rule); color: var(--mist);
+      width: 34px; height: 34px; border-radius: 2px; cursor: pointer; flex-shrink: 0;
+      transition: color 0.2s, border-color 0.2s;
+    }
+    .entry-remove:hover { color: #c85a0a; border-color: #c85a0a; }
+
+    .field-label {
+      font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--ash); margin-bottom: 6px; display: block;
+    }
+    .field-label.is-dm { color: var(--amber-dim); }
+
+    .entry-field { margin-bottom: 12px; }
+    .entry-field:last-child { margin-bottom: 0; }
+
+    textarea.entry-textarea {
+      width: 100%; background: var(--smoke); border: 0.5px solid var(--rule); color: var(--mist);
+      font-family: var(--cond); font-size: 14px; line-height: 1.6; padding: 10px 12px; border-radius: 2px;
+      resize: vertical; min-height: 48px;
+    }
+    textarea.entry-textarea:focus { outline: none; border-color: var(--amber); }
+    textarea.entry-textarea.is-dm { border-color: var(--amber-dim); background: rgba(200,135,10,0.05); color: var(--paper); }
+
+    .connection-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+    .connection-row select { flex: 1; min-width: 130px; }
+    .connection-arrow { color: var(--ash); font-family: var(--mono); font-size: 13px; }
+
+    .empty-state {
+      padding: 60px 28px; text-align: center; font-family: var(--mono); font-size: 12px;
+      color: var(--ash); background: var(--ink); border: 0.5px solid var(--rule); letter-spacing: 0.05em;
+    }
+
+    .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+    .toolbar-right { display: flex; gap: 10px; }
+
+    .status-line {
+      font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; color: var(--ash);
+      margin-bottom: 20px; text-transform: uppercase;
+    }
+    .status-line.is-error { color: #c85a0a; }
+    .status-line.is-saving { color: var(--amber); }
+
+    .v1-note {
+      background: var(--smoke); border: 0.5px solid var(--rule); padding: 16px 20px; border-radius: 2px;
+      font-size: 13px; color: var(--mist); line-height: 1.6; margin-bottom: 28px;
+    }
+    .v1-note strong { color: var(--amber-light); font-weight: 500; }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <a href="https://firstmeasurestudio.store/index.html" class="nav-wordmark">First Measure Studios</a>
+    <ul class="nav-links">
+      <li><a href="https://firstmeasurestudio.store/index.html#projects">Projects</a></li>
+      <li><a href="https://firstmeasurestudio.store/index.html#studio">Studio</a></li>
+      <li><a href="https://firstmeasurestudio.store/tools/index.html">Tools</a></li>
+      <li><a href="https://firstmeasurestudio.store/show.html">Sessions</a></li>
+      <li><a href="https://firstmeasurestudio.store/index.html#contact">Contact</a></li>
+    </ul>
+  </nav>
+
+  <div class="page-header">
+    <p class="page-eyebrow"><a href="https://firstmeasurestudio.store/tools/index.html">&larr; DM Toolkit</a> &middot; Narrative</p>
+    <h1 class="page-title">Bond <em>Web</em></h1>
+    <p class="page-sub">The canon relationship graph for a campaign &mdash; NPCs, factions, and locations, and how they connect. The DM builds and owns this structure; a player-facing view with private annotations is coming next. Synced live to Firestore.</p>
+  </div>
+
+  <section id="bondweb">
+    <div class="v1-note">
+      <strong>v1 &mdash; DM panel only.</strong> This is the data layer: add nodes and edges here and confirm they save and reload correctly. The visual force-graph rendering and the player annotation view are the next two builds on top of this.
+    </div>
+
+    <div class="layout">
+
+      <div>
+        <div id="campaign-list" class="campaign-list"></div>
+        <button class="btn btn-block" id="new-campaign">+ New Campaign</button>
+      </div>
+
+      <div id="editor-wrap"></div>
+
+    </div>
+  </section>
+
+  <footer>
+    <span class="footer-word">First Measure Studios</span>
+    <span class="footer-meta">Harrison, Arkansas &middot; Est. 2024</span>
+  </footer>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+    import {
+      getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, getDocs, getDoc,
+      setDoc, serverTimestamp, query
+    } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyC9kb85GvgVpMEePEKWTW1aZHi1d-48MPY",
+      authDomain: "firstmeasure-bonds.firebaseapp.com",
+      projectId: "firstmeasure-bonds",
+      storageBucket: "firstmeasure-bonds.firebasestorage.app",
+      messagingSenderId: "910391273136",
+      appId: "1:910391273136:web:2fc4282a4dd367152efd75"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const NODE_TYPES = ['pc', 'npc', 'faction', 'location'];
+    const NODE_TYPE_LABELS = { pc: 'PC', npc: 'NPC', faction: 'Faction', location: 'Location' };
+    const HUB_TYPES = ['faction', 'location'];
+    const RELATIONSHIPS = ['ally', 'enemy', 'family', 'employer', 'debt', 'custom'];
+    const RELATIONSHIP_LABELS = { ally: 'Ally', enemy: 'Enemy', family: 'Family', employer: 'Employer', debt: 'Debt', custom: 'Custom' };
+
+    let state = {
+      campaigns: [],       // [{id, name}]
+      selectedId: null,
+      nodes: [],           // loaded for selected campaign
+      edges: [],
+      activeTab: 'nodes',
+      loading: false,
+      error: null
+    };
+
+    function setStatus(msg, isError) {
+      const el = document.getElementById('status-line');
+      if (!el) return;
+      el.textContent = msg || '';
+      el.className = 'status-line' + (isError ? ' is-error' : msg ? ' is-saving' : '');
+    }
+
+    async function refreshCampaignList() {
+      const snap = await getDocs(collection(db, 'campaigns'));
+      state.campaigns = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    }
+
+    async function refreshGraph() {
+      if (!state.selectedId) { state.nodes = []; state.edges = []; return; }
+      const [nodeSnap, edgeSnap] = await Promise.all([
+        getDocs(collection(db, 'campaigns', state.selectedId, 'nodes')),
+        getDocs(collection(db, 'campaigns', state.selectedId, 'edges'))
+      ]);
+      state.nodes = nodeSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      state.edges = edgeSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    }
+
+    function nodeName(id) {
+      const n = state.nodes.find(n => n.id === id);
+      return n ? `${n.name || 'Untitled'} (${NODE_TYPE_LABELS[n.type] || n.type})` : 'Unknown';
+    }
+
+    function currentCampaign() {
+      return state.campaigns.find(c => c.id === state.selectedId) || null;
+    }
+
+    function renderCampaignList() {
+      const list = document.getElementById('campaign-list');
+      if (state.campaigns.length === 0) { list.innerHTML = ''; return; }
+      list.innerHTML = state.campaigns.map(c => `
+        <div class="campaign-item ${c.id === state.selectedId ? 'is-selected' : ''}" data-id="${c.id}">
+          <span>${(c.name || 'Untitled').replace(/</g, '&lt;')}</span>
+        </div>
+      `).join('');
+
+      list.querySelectorAll('.campaign-item').forEach(el => {
+        el.addEventListener('click', async () => {
+          if (el.dataset.id === state.selectedId) return;
+          state.selectedId = el.dataset.id;
+          state.activeTab = 'nodes';
+          await renderAll(true);
+        });
+      });
+    }
+
+    function nodeCardHtml(n) {
+      const weight = n.weight || (HUB_TYPES.includes(n.type) ? 'hub' : 'satellite');
+      return `
+        <div class="entry-card ${n.archived ? 'is-archived' : ''}" data-node-id="${n.id}">
+          <div class="entry-top-row">
+            <input type="text" class="entry-name-input" data-field="name" value="${(n.name || '').replace(/"/g, '&quot;')}" placeholder="Name">
+            <select data-field="type">
+              ${NODE_TYPES.map(t => `<option value="${t}" ${n.type === t ? 'selected' : ''}>${NODE_TYPE_LABELS[t]}</option>`).join('')}
+            </select>
+            <select data-field="weight">
+              <option value="hub" ${weight === 'hub' ? 'selected' : ''}>Hub</option>
+              <option value="satellite" ${weight === 'satellite' ? 'selected' : ''}>Satellite</option>
+            </select>
+            <button class="entry-remove" data-action="remove-node" title="Remove">&times;</button>
+          </div>
+          <div class="entry-top-row">
+            <button class="toggle-pill ${n.visibility === 'hidden' ? 'state-b' : 'state-a'}" data-field="visibility" data-value="${n.visibility === 'hidden' ? 'visible' : 'hidden'}">
+              ${n.visibility === 'hidden' ? 'Hidden' : 'Visible'}
+            </button>
+            <button class="toggle-pill ${n.archived ? 'state-b' : 'state-a'}" data-field="archived" data-value="${n.archived ? 'false' : 'true'}">
+              ${n.archived ? 'Archived' : 'Active'}
+            </button>
+          </div>
+          <div class="entry-field">
+            <label class="field-label">Player-visible description</label>
+            <textarea class="entry-textarea" data-field="player_description" placeholder="What players see once this is visible&hellip;">${n.player_description || ''}</textarea>
+          </div>
+          <div class="entry-field">
+            <label class="field-label is-dm">DM-only notes</label>
+            <textarea class="entry-textarea is-dm" data-field="dm_notes" placeholder="Secrets, plans, true motivations&hellip;">${n.dm_notes || ''}</textarea>
+          </div>
+        </div>
+      `;
+    }
+
+    function edgeCardHtml(e) {
+      const nodeOptions = state.nodes.map(n => `<option value="${n.id}" ${e.source === n.id ? 'selected' : ''}>${(n.name || 'Untitled').replace(/</g, '&lt;')}</option>`).join('');
+      const targetOptions = state.nodes.map(n => `<option value="${n.id}" ${e.target === n.id ? 'selected' : ''}>${(n.name || 'Untitled').replace(/</g, '&lt;')}</option>`).join('');
+      return `
+        <div class="entry-card ${e.archived ? 'is-archived' : ''}" data-edge-id="${e.id}">
+          <div class="connection-row">
+            <select data-field="source"><option value="">&mdash; source &mdash;</option>${nodeOptions}</select>
+            <span class="connection-arrow">${e.directional ? '&rarr;' : '&harr;'}</span>
+            <select data-field="target"><option value="">&mdash; target &mdash;</option>${targetOptions}</select>
+            <button class="entry-remove" data-action="remove-edge" title="Remove">&times;</button>
+          </div>
+          <div class="entry-top-row">
+            <select data-field="relationship">
+              ${RELATIONSHIPS.map(r => `<option value="${r}" ${e.relationship === r ? 'selected' : ''}>${RELATIONSHIP_LABELS[r]}</option>`).join('')}
+            </select>
+            ${e.relationship === 'custom' ? `<input type="text" class="entry-name-input" data-field="label" value="${(e.label || '').replace(/"/g, '&quot;')}" placeholder="Custom label" style="flex:1; min-width:120px;">` : ''}
+          </div>
+          <div class="entry-top-row">
+            <button class="toggle-pill ${e.status === 'theory' ? 'state-b' : 'state-a'}" data-field="status" data-value="${e.status === 'theory' ? 'confirmed' : 'theory'}">
+              ${e.status === 'theory' ? 'Theory' : 'Confirmed'}
+            </button>
+            <label class="check-label">
+              <input type="checkbox" data-field="directional" ${e.directional ? 'checked' : ''}> Directional
+            </label>
+            <button class="toggle-pill ${e.visibility === 'hidden' ? 'state-b' : 'state-a'}" data-field="visibility" data-value="${e.visibility === 'hidden' ? 'visible' : 'hidden'}">
+              ${e.visibility === 'hidden' ? 'Hidden' : 'Visible'}
+            </button>
+            <button class="toggle-pill ${e.archived ? 'state-b' : 'state-a'}" data-field="archived" data-value="${e.archived ? 'false' : 'true'}">
+              ${e.archived ? 'Archived' : 'Active'}
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderEditor() {
+      const wrap = document.getElementById('editor-wrap');
+      const campaign = currentCampaign();
+
+      if (!campaign) {
+        wrap.innerHTML = `<div class="empty-state">No campaign selected &mdash; create one to get started.</div>`;
+        return;
+      }
+
+      const tab = state.activeTab || 'nodes';
+      const labels = { nodes: 'Node', edges: 'Edge' };
+
+      let listHtml;
+      if (tab === 'nodes') {
+        listHtml = state.nodes.length
+          ? `<div class="entry-list">${state.nodes.map(nodeCardHtml).join('')}</div>`
+          : `<div class="empty-state">No nodes yet &mdash; add an NPC, faction, or location below.</div>`;
+      } else {
+        listHtml = state.edges.length
+          ? `<div class="entry-list">${state.edges.map(edgeCardHtml).join('')}</div>`
+          : `<div class="empty-state">No edges yet &mdash; connect two nodes below.</div>`;
+      }
+
+      const addDisabled = tab === 'edges' && state.nodes.length < 2;
+
+      wrap.innerHTML = `
+        <input type="text" class="campaign-name-input" id="campaign-name" value="${(campaign.name || '').replace(/"/g, '&quot;')}">
+        <p class="status-line" id="status-line"></p>
+
+        <div class="tabs">
+          <div class="tab ${tab === 'nodes' ? 'is-active' : ''}" data-tab="nodes">Nodes <span class="tab-count">${state.nodes.length}</span></div>
+          <div class="tab ${tab === 'edges' ? 'is-active' : ''}" data-tab="edges">Edges <span class="tab-count">${state.edges.length}</span></div>
+        </div>
+
+        <div class="toolbar">
+          <button class="btn" id="add-entry" ${addDisabled ? 'disabled' : ''}>+ Add ${labels[tab]}${addDisabled ? ' (need 2+ nodes)' : ''}</button>
+          <div class="toolbar-right">
+            <button class="btn btn-ghost btn-sm" id="refresh-graph">Refresh</button>
+            <button class="btn btn-ghost btn-sm" id="delete-campaign">Delete Campaign</button>
+          </div>
+        </div>
+
+        ${listHtml}
+      `;
+
+      document.getElementById('campaign-name').addEventListener('change', async (e) => {
+        const name = e.target.value;
+        campaign.name = name;
+        setStatus('Saving…');
+        try {
+          await updateDoc(doc(db, 'campaigns', campaign.id), { name });
+          setStatus('');
+        } catch (err) {
+          setStatus('Save failed — ' + err.message, true);
+        }
+        renderCampaignList();
+      });
+
+      document.querySelectorAll('.tab').forEach(t => {
+        t.addEventListener('click', () => {
+          state.activeTab = t.dataset.tab;
+          renderEditor();
+        });
+      });
+
+      document.getElementById('refresh-graph').addEventListener('click', async () => {
+        setStatus('Refreshing…');
+        await refreshGraph();
+        renderEditor();
+      });
+
+      document.getElementById('add-entry').addEventListener('click', async () => {
+        setStatus('Saving…');
+        try {
+          if (tab === 'nodes') {
+            const ref = await addDoc(collection(db, 'campaigns', campaign.id, 'nodes'), {
+              name: '', type: 'npc', weight: 'satellite', visibility: 'visible',
+              archived: false, player_description: '', dm_notes: ''
+            });
+            state.nodes.push({ id: ref.id, name: '', type: 'npc', weight: 'satellite', visibility: 'visible', archived: false, player_description: '', dm_notes: '' });
+          } else {
+            const a = state.nodes[0], b = state.nodes[1];
+            const ref = await addDoc(collection(db, 'campaigns', campaign.id, 'edges'), {
+              source: a.id, target: b.id, relationship: 'ally', label: '',
+              status: 'confirmed', directional: false, visibility: 'visible', archived: false
+            });
+            state.edges.push({ id: ref.id, source: a.id, target: b.id, relationship: 'ally', label: '', status: 'confirmed', directional: false, visibility: 'visible', archived: false });
+          }
+          setStatus('');
+        } catch (err) {
+          setStatus('Save failed — ' + err.message, true);
+        }
+        renderEditor();
+      });
+
+      document.getElementById('delete-campaign').addEventListener('click', async () => {
+        if (!confirm(`Delete "${campaign.name}" and everything in it? This can't be undone.`)) return;
+        setStatus('Deleting…');
+        try {
+          const nodeSnap = await getDocs(collection(db, 'campaigns', campaign.id, 'nodes'));
+          const edgeSnap = await getDocs(collection(db, 'campaigns', campaign.id, 'edges'));
+          await Promise.all([
+            ...nodeSnap.docs.map(d => deleteDoc(d.ref)),
+            ...edgeSnap.docs.map(d => deleteDoc(d.ref))
+          ]);
+          await deleteDoc(doc(db, 'campaigns', campaign.id));
+          state.campaigns = state.campaigns.filter(c => c.id !== campaign.id);
+          state.selectedId = state.campaigns.length ? state.campaigns[0].id : null;
+          await refreshGraph();
+          renderAll();
+        } catch (err) {
+          setStatus('Delete failed — ' + err.message, true);
+        }
+      });
+
+      // Node field edits
+      wrap.querySelectorAll('[data-node-id]').forEach(card => {
+        const id = card.dataset.nodeId;
+        const node = state.nodes.find(n => n.id === id);
+        if (!node) return;
+
+        card.querySelectorAll('[data-field]').forEach(el => {
+          const field = el.dataset.field;
+          const isToggle = el.classList.contains('toggle-pill');
+          const evt = el.tagName === 'SELECT' ? 'change' : isToggle ? 'click' : 'input';
+          const commit = el.tagName === 'TEXTAREA' || el.type === 'text' ? 'change' : evt;
+
+          el.addEventListener(commit, async () => {
+            let value = isToggle ? (el.dataset.value === 'true' ? true : el.dataset.value === 'false' ? false : el.dataset.value) : el.value;
+            node[field] = value;
+            setStatus('Saving…');
+            try {
+              await updateDoc(doc(db, 'campaigns', campaign.id, 'nodes', id), { [field]: value });
+              setStatus('');
+            } catch (err) {
+              setStatus('Save failed — ' + err.message, true);
+            }
+            if (isToggle || field === 'type') renderEditor();
+          });
+        });
+      });
+
+      document.querySelectorAll('[data-action="remove-node"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const card = btn.closest('[data-node-id]');
+          const id = card.dataset.nodeId;
+          setStatus('Deleting…');
+          try {
+            await deleteDoc(doc(db, 'campaigns', campaign.id, 'nodes', id));
+            state.nodes = state.nodes.filter(n => n.id !== id);
+            setStatus('');
+          } catch (err) {
+            setStatus('Delete failed — ' + err.message, true);
+          }
+          renderEditor();
+        });
+      });
+
+      // Edge field edits
+      wrap.querySelectorAll('[data-edge-id]').forEach(card => {
+        const id = card.dataset.edgeId;
+        const edge = state.edges.find(e => e.id === id);
+        if (!edge) return;
+
+        card.querySelectorAll('[data-field]').forEach(el => {
+          const field = el.dataset.field;
+          const isToggle = el.classList.contains('toggle-pill');
+          const isCheckbox = el.type === 'checkbox';
+          const evt = el.tagName === 'SELECT' ? 'change' : isToggle ? 'click' : isCheckbox ? 'change' : 'change';
+
+          el.addEventListener(evt, async () => {
+            let value;
+            if (isToggle) value = el.dataset.value === 'true' ? true : el.dataset.value === 'false' ? false : el.dataset.value;
+            else if (isCheckbox) value = el.checked;
+            else value = el.value;
+
+            edge[field] = value;
+            setStatus('Saving…');
+            try {
+              await updateDoc(doc(db, 'campaigns', campaign.id, 'edges', id), { [field]: value });
+              setStatus('');
+            } catch (err) {
+              setStatus('Save failed — ' + err.message, true);
+            }
+            if (isToggle || field === 'relationship' || field === 'directional') renderEditor();
+          });
+        });
+      });
+
+      document.querySelectorAll('[data-action="remove-edge"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const card = btn.closest('[data-edge-id]');
+          const id = card.dataset.edgeId;
+          setStatus('Deleting…');
+          try {
+            await deleteDoc(doc(db, 'campaigns', campaign.id, 'edges', id));
+            state.edges = state.edges.filter(e => e.id !== id);
+            setStatus('');
+          } catch (err) {
+            setStatus('Delete failed — ' + err.message, true);
+          }
+          renderEditor();
+        });
+      });
+    }
+
+    async function renderAll(reloadGraph) {
+      if (reloadGraph) await refreshGraph();
+      renderCampaignList();
+      renderEditor();
+    }
+
+    document.getElementById('new-campaign').addEventListener('click', async () => {
+      const ref = await addDoc(collection(db, 'campaigns'), { name: 'New Campaign', createdAt: serverTimestamp() });
+      state.campaigns.push({ id: ref.id, name: 'New Campaign' });
+      state.selectedId = ref.id;
+      state.activeTab = 'nodes';
+      await renderAll(true);
+    });
+
+    (async function init() {
+      const wrap = document.getElementById('editor-wrap');
+      wrap.innerHTML = `<div class="empty-state">Loading&hellip;</div>`;
+      try {
+        await refreshCampaignList();
+        if (state.campaigns.length && !state.selectedId) state.selectedId = state.campaigns[0].id;
+        await renderAll(true);
+      } catch (err) {
+        wrap.innerHTML = `<div class="empty-state">Couldn't connect to Firestore &mdash; ${err.message}</div>`;
+      }
+    })();
+  </script>
+
+</body>
+</html>
