@@ -174,18 +174,27 @@
     .web-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px; }
     .web-hint { font-family: var(--hand); font-size: 16px; color: var(--paper-dim); }
     .web-stage-wrap {
-      background: rgba(43,32,21,0.35); border-radius: 2px; overflow: hidden;
-      box-shadow: 0 6px 16px rgba(0,0,0,0.35) inset;
+      background-color: var(--cork-deep);
+      background-image:
+        radial-gradient(circle at 20% 25%, rgba(0,0,0,0.18) 0, transparent 40%),
+        radial-gradient(circle at 80% 20%, rgba(0,0,0,0.15) 0, transparent 40%),
+        radial-gradient(circle at 30% 80%, rgba(0,0,0,0.15) 0, transparent 40%),
+        radial-gradient(circle at 75% 75%, rgba(0,0,0,0.18) 0, transparent 40%),
+        repeating-radial-gradient(circle at center, rgba(0,0,0,0.06) 0, rgba(0,0,0,0.06) 1px, transparent 1.5px, transparent 7px);
+      border: 8px solid var(--paper-dim);
+      border-radius: 1px;
+      overflow: hidden;
+      box-shadow: 0 10px 22px rgba(0,0,0,0.4), 0 2px 6px rgba(0,0,0,0.3);
       margin-bottom: 20px;
     }
     #web-svg { display: block; cursor: grab; }
     .pin-node { cursor: pointer; }
     .pin-label {
       font-family: var(--hand); font-size: 15px; fill: var(--paper); font-weight: 600;
-      paint-order: stroke; stroke: var(--cork-deep); stroke-width: 3px;
+      paint-order: stroke; stroke: var(--cork-deep); stroke-width: 4px;
     }
     .link-label {
-      font-family: var(--typewriter); font-size: 8.5px; fill: var(--paper-dim);
+      font-family: var(--typewriter); font-size: 8px; fill: var(--paper-dim);
       text-anchor: middle; paint-order: stroke; stroke: var(--cork-deep); stroke-width: 3px;
     }
     #web-detail .entry-card { transform: rotate(-0.3deg); }
@@ -1005,6 +1014,16 @@
         .attr('width', '100%')
         .attr('height', height);
 
+      const defs = svg.append('defs');
+
+      const pinGrad = defs.append('radialGradient').attr('id', 'pinHeadGrad').attr('cx', '35%').attr('cy', '30%');
+      pinGrad.append('stop').attr('offset', '0%').attr('stop-color', '#f1d9a0');
+      pinGrad.append('stop').attr('offset', '55%').attr('stop-color', '#c9a25c');
+      pinGrad.append('stop').attr('offset', '100%').attr('stop-color', '#8a6a34');
+
+      const dropShadow = defs.append('filter').attr('id', 'pinShadow').attr('x', '-60%').attr('y', '-60%').attr('width', '220%').attr('height', '220%');
+      dropShadow.append('feDropShadow').attr('dx', 0).attr('dy', 3).attr('stdDeviation', 2.5).attr('flood-color', '#000').attr('flood-opacity', 0.5);
+
       const g = svg.append('g');
       svg.call(d3.zoom().scaleExtent([0.4, 3]).on('zoom', (ev) => g.attr('transform', ev.transform)));
 
@@ -1014,11 +1033,26 @@
         .force('center', d3.forceCenter(width / 2, height / 2))
         .force('collide', d3.forceCollide().radius(d => (HUB_TYPES.includes(d.type) ? 34 : 22)));
 
-      const link = g.append('g').selectAll('line').data(links).join('line')
+      // give each string a stable, alternating sag so it reads as pinned yarn rather than a ruler-straight line
+      links.forEach((l, i) => { l._bow = (i % 2 === 0 ? 1 : -1) * (10 + (i % 3) * 6); });
+
+      function stringPath(d) {
+        const dx = d.target.x - d.source.x, dy = d.target.y - d.source.y;
+        const mx = (d.source.x + d.target.x) / 2, my = (d.source.y + d.target.y) / 2;
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        const nx = -dy / len, ny = dx / len;
+        const cx = mx + nx * d._bow, cy = my + ny * d._bow;
+        return `M${d.source.x},${d.source.y} Q${cx},${cy} ${d.target.x},${d.target.y}`;
+      }
+
+      const link = g.append('g').selectAll('path').data(links).join('path')
+        .attr('fill', 'none')
         .attr('stroke', d => d.status === 'theory' ? 'var(--string-blue)' : 'var(--string-red)')
-        .attr('stroke-width', d => d.relationship === 'family' ? 3 : 1.8)
-        .attr('stroke-dasharray', d => d.status === 'theory' ? '5,4' : null)
-        .attr('opacity', d => d.visibility === 'hidden' ? 0.35 : 0.85);
+        .attr('stroke-width', d => d.relationship === 'family' ? 3.2 : 2)
+        .attr('stroke-linecap', 'round')
+        .attr('stroke-dasharray', d => d.status === 'theory' ? '6,5' : null)
+        .attr('opacity', d => d.visibility === 'hidden' ? 0.35 : 0.9)
+        .attr('filter', 'url(#pinShadow)');
 
       const linkLabel = g.append('g').selectAll('text').data(links).join('text')
         .attr('class', 'link-label')
@@ -1032,15 +1066,25 @@
           .on('end', (ev, d) => { if (!ev.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }));
 
       node.append('circle')
+        .attr('class', 'pin-ring')
+        .attr('r', d => (HUB_TYPES.includes(d.type) ? 26 : 15) + 4)
+        .attr('fill', 'none')
+        .attr('stroke', d => NODE_COLORS[d.type] || '#c9a25c')
+        .attr('stroke-width', 3)
+        .attr('opacity', d => d.archived ? 0.35 : (d.visibility === 'hidden' ? 0.5 : 0.9));
+
+      node.append('circle')
+        .attr('class', 'pin-head')
         .attr('r', d => HUB_TYPES.includes(d.type) ? 26 : 15)
-        .attr('fill', d => NODE_COLORS[d.type] || '#c9a25c')
+        .attr('fill', 'url(#pinHeadGrad)')
         .attr('stroke', '#2b2015')
-        .attr('stroke-width', 2)
+        .attr('stroke-width', 1.5)
+        .attr('filter', 'url(#pinShadow)')
         .attr('opacity', d => d.archived ? 0.4 : (d.visibility === 'hidden' ? 0.55 : 1));
 
       node.append('text')
         .attr('class', 'pin-label')
-        .attr('y', d => (HUB_TYPES.includes(d.type) ? 26 : 15) + 16)
+        .attr('y', d => (HUB_TYPES.includes(d.type) ? 26 : 15) + 17)
         .attr('text-anchor', 'middle')
         .text(d => d.name || 'Untitled');
 
@@ -1051,8 +1095,8 @@
       });
 
       sim.on('tick', () => {
-        link.attr('x1', d => d.source.x).attr('y1', d => d.source.y).attr('x2', d => d.target.x).attr('y2', d => d.target.y);
-        linkLabel.attr('x', d => (d.source.x + d.target.x) / 2).attr('y', d => (d.source.y + d.target.y) / 2);
+        link.attr('d', stringPath);
+        linkLabel.attr('x', d => (d.source.x + d.target.x) / 2).attr('y', d => (d.source.y + d.target.y) / 2 + d._bow * 0.5);
         node.attr('transform', d => `translate(${d.x},${d.y})`);
       });
     }
