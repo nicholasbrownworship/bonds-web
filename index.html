@@ -190,6 +190,20 @@
     }
     #web-detail .entry-card { transform: rotate(-0.3deg); }
 
+    /* ============ NODE DETAIL / ANNOTATIONS ============ */
+    .node-detail-card { position: relative; transform: rotate(-0.3deg); max-width: 560px; }
+    .detail-name { font-family: var(--hand); font-weight: 600; font-size: 26px; }
+    .ann-section { margin-top: 20px; padding-top: 16px; border-top: 1px dashed var(--ink-soft); }
+    .ann-list { display: flex; flex-direction: column; gap: 10px; margin: 10px 0 16px; }
+    .ann-empty { font-family: var(--hand); font-size: 16px; color: var(--ink-soft); }
+    .ann-card { background: var(--paper-dim); border-left: 3px solid var(--string-red); padding: 10px 12px; border-radius: 1px; }
+    .ann-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+    .ann-type { font-family: var(--typewriter); font-size: 9.5px; color: var(--string-red); }
+    .ann-owner { font-family: var(--hand); font-size: 15px; color: var(--ink-soft); flex: 1; }
+    .ann-content { font-family: var(--body); font-size: 13.5px; line-height: 1.5; color: var(--ink); }
+    .ann-form { display: flex; flex-direction: column; gap: 10px; }
+    .ann-form-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+
     /* ============ ENTRY CARDS (pinned notes) ============ */
     .entry-list { display: flex; flex-direction: column; gap: 26px; margin-bottom: 24px; }
     .entry-card {
@@ -338,12 +352,26 @@
       selectedId: null,
       nodes: [],           // loaded for selected campaign
       edges: [],
+      annotations: [],     // loaded for selected campaign
+      selectedNodeId: null,
       activeTab: 'nodes',
       view: 'board',       // 'board' | 'web'
       showArchived: false,
       loading: false,
       error: null
     };
+
+    const ANNOTATION_TYPES = ['note', 'trust_flag', 'theory'];
+    const ANNOTATION_TYPE_LABELS = { note: 'Note', trust_flag: 'Trust Flag', theory: 'Theory' };
+
+    function getPlayerName() {
+      let name = localStorage.getItem('bondweb-player-name');
+      if (!name) {
+        name = (window.prompt('What name should your notes be signed with?') || '').trim();
+        if (name) localStorage.setItem('bondweb-player-name', name);
+      }
+      return name || 'Anonymous';
+    }
 
     function setStatus(msg, isError) {
       const el = document.getElementById('status-line');
@@ -358,13 +386,15 @@
     }
 
     async function refreshGraph() {
-      if (!state.selectedId) { state.nodes = []; state.edges = []; return; }
-      const [nodeSnap, edgeSnap] = await Promise.all([
+      if (!state.selectedId) { state.nodes = []; state.edges = []; state.annotations = []; return; }
+      const [nodeSnap, edgeSnap, annSnap] = await Promise.all([
         getDocs(collection(db, 'campaigns', state.selectedId, 'nodes')),
-        getDocs(collection(db, 'campaigns', state.selectedId, 'edges'))
+        getDocs(collection(db, 'campaigns', state.selectedId, 'edges')),
+        getDocs(collection(db, 'campaigns', state.selectedId, 'annotations'))
       ]);
       state.nodes = nodeSnap.docs.map(d => ({ id: d.id, ...d.data() }));
       state.edges = edgeSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      state.annotations = annSnap.docs.map(d => ({ id: d.id, ...d.data() }));
     }
 
     function nodeName(id) {
@@ -390,6 +420,7 @@
           if (el.dataset.id === state.selectedId) return;
           state.selectedId = el.dataset.id;
           state.activeTab = 'nodes';
+          state.selectedNodeId = null;
           await renderAll(true);
         });
       });
@@ -417,6 +448,7 @@
             <button class="toggle-pill ${n.archived ? 'state-b' : 'state-a'}" data-field="archived" data-value="${n.archived ? 'false' : 'true'}">
               ${n.archived ? 'Archived' : 'Active'}
             </button>
+            <button class="btn btn-ghost btn-sm" data-action="view-notes">Notes${(() => { const c = state.annotations.filter(a => a.attached_to === n.id).length; return c ? ` (${c})` : ''; })()}</button>
           </div>
           <div class="entry-field">
             <label class="field-label">Player-visible description</label>
@@ -465,6 +497,120 @@
       `;
     }
 
+    function renderNodeDetail(campaign) {
+      const el = document.getElementById('node-detail');
+      if (!el) return;
+      if (!state.selectedNodeId) { el.innerHTML = ''; return; }
+
+      const node = state.nodes.find(n => n.id === state.selectedNodeId);
+      if (!node) { el.innerHTML = ''; state.selectedNodeId = null; return; }
+
+      const me = localStorage.getItem('bondweb-player-name') || '';
+      const anns = state.annotations
+        .filter(a => a.attached_to === node.id)
+        .filter(a => a.visibility === 'shared_party' || a.owner === me);
+
+      const annHtml = anns.length ? anns.map(a => `
+        <div class="ann-card" data-ann-id="${a.id}">
+          <div class="ann-top">
+            <span class="ann-type">${ANNOTATION_TYPE_LABELS[a.type] || a.type}</span>
+            <span class="ann-owner">${a.owner === me ? 'You' : (a.owner || 'Someone').replace(/</g, '&lt;')}</span>
+            ${a.owner === me ? `
+              <button class="toggle-pill ${a.visibility === 'private' ? 'state-b' : 'state-a'}" data-ann-action="toggle-vis" data-value="${a.visibility === 'private' ? 'shared_party' : 'private'}">
+                ${a.visibility === 'private' ? 'Private' : 'Shared'}
+              </button>
+              <button class="entry-remove" data-ann-action="delete" title="Remove">&times;</button>
+            ` : ''}
+          </div>
+          <p class="ann-content">${(a.content || '').replace(/</g, '&lt;')}</p>
+        </div>
+      `).join('') : `<p class="ann-empty">No notes on this pin yet.</p>`;
+
+      el.innerHTML = `
+        <div class="entry-card node-detail-card">
+          <button class="entry-remove" id="close-detail" title="Close" style="position:absolute; top:14px; right:14px;">&times;</button>
+          <div class="entry-top-row"><span class="detail-name">${(node.name || 'Untitled').replace(/</g, '&lt;')}</span></div>
+          ${node.player_description ? `<div class="entry-field"><span class="field-label">Player-visible</span>${node.player_description.replace(/</g, '&lt;')}</div>` : ''}
+          ${node.dm_notes ? `<div class="entry-field"><span class="field-label is-dm">DM only (visible to everyone here for now — player view is still coming)</span>${node.dm_notes.replace(/</g, '&lt;')}</div>` : ''}
+
+          <div class="ann-section">
+            <span class="field-label">Notes &amp; theories &mdash; signed as ${(me || 'not set').replace(/</g, '&lt;')} <a href="#" id="change-name" style="color:inherit;">(change)</a></span>
+            <div class="ann-list">${annHtml}</div>
+
+            <div class="ann-form">
+              <select id="ann-type">
+                ${ANNOTATION_TYPES.map(t => `<option value="${t}">${ANNOTATION_TYPE_LABELS[t]}</option>`).join('')}
+              </select>
+              <textarea class="entry-textarea" id="ann-content" placeholder="What do you think&hellip;"></textarea>
+              <div class="ann-form-row">
+                <label class="check-label"><input type="checkbox" id="ann-shared"> Share with the party</label>
+                <button class="btn btn-sm" id="ann-save">Pin Note</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('close-detail').addEventListener('click', () => {
+        state.selectedNodeId = null;
+        renderNodeDetail(campaign);
+      });
+
+      document.getElementById('change-name').addEventListener('click', (e) => {
+        e.preventDefault();
+        localStorage.removeItem('bondweb-player-name');
+        getPlayerName();
+        renderNodeDetail(campaign);
+      });
+
+      document.getElementById('ann-save').addEventListener('click', async () => {
+        const content = document.getElementById('ann-content').value.trim();
+        if (!content) return;
+        const type = document.getElementById('ann-type').value;
+        const shared = document.getElementById('ann-shared').checked;
+        const owner = getPlayerName();
+        const data = { attached_to: node.id, type, content, visibility: shared ? 'shared_party' : 'private', owner };
+        try {
+          const ref = await addDoc(collection(db, 'campaigns', campaign.id, 'annotations'), data);
+          state.annotations.push({ id: ref.id, ...data });
+          renderNodeDetail(campaign);
+        } catch (err) {
+          setStatus('Save failed — ' + err.message, true);
+        }
+      });
+
+      el.querySelectorAll('[data-ann-action="toggle-vis"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const card = btn.closest('[data-ann-id]');
+          const id = card.dataset.annId;
+          const ann = state.annotations.find(a => a.id === id);
+          if (!ann) return;
+          const value = btn.dataset.value;
+          ann.visibility = value;
+          try {
+            await updateDoc(doc(db, 'campaigns', campaign.id, 'annotations', id), { visibility: value });
+          } catch (err) {
+            setStatus('Save failed — ' + err.message, true);
+          }
+          renderNodeDetail(campaign);
+        });
+      });
+
+      el.querySelectorAll('[data-ann-action="delete"]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const card = btn.closest('[data-ann-id]');
+          const id = card.dataset.annId;
+          try {
+            await deleteDoc(doc(db, 'campaigns', campaign.id, 'annotations', id));
+            state.annotations = state.annotations.filter(a => a.id !== id);
+          } catch (err) {
+            setStatus('Save failed — ' + err.message, true);
+          }
+          renderNodeDetail(campaign);
+        });
+      });
+    }
+
     function renderEditor() {
       const wrap = document.getElementById('editor-wrap');
       const campaign = currentCampaign();
@@ -486,7 +632,11 @@
         </div>
 
         <div id="view-area"></div>
+
+        <div id="node-detail"></div>
       `;
+
+      renderNodeDetail(campaign);
 
       document.getElementById('campaign-name').addEventListener('change', async (e) => {
         const name = e.target.value;
@@ -634,6 +784,15 @@
         });
       });
 
+      document.querySelectorAll('[data-action="view-notes"]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const card = btn.closest('[data-node-id]');
+          state.selectedNodeId = card.dataset.nodeId;
+          renderNodeDetail(campaign);
+          document.getElementById('node-detail').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+      });
+
       document.querySelectorAll('[data-action="remove-node"]').forEach(btn => {
         btn.addEventListener('click', async () => {
           const card = btn.closest('[data-node-id]');
@@ -708,7 +867,6 @@
           <span class="web-hint">Drag a pin to rearrange &middot; scroll to zoom &middot; click a pin for its notes</span>
         </div>
         <div class="web-stage-wrap"><svg id="web-svg"></svg></div>
-        <div id="web-detail"></div>
       `;
 
       document.getElementById('toggle-archived').addEventListener('change', (e) => {
@@ -777,14 +935,9 @@
         .text(d => d.name || 'Untitled');
 
       node.on('click', (ev, d) => {
-        const el = document.getElementById('web-detail');
-        el.innerHTML = `
-          <div class="entry-card">
-            <div class="entry-top-row"><span style="font-family:var(--hand); font-size:24px;">${(d.name || 'Untitled').replace(/</g, '&lt;')}</span></div>
-            ${d.player_description ? `<div class="entry-field"><span class="field-label">Player-visible</span>${d.player_description.replace(/</g, '&lt;')}</div>` : ''}
-            ${d.dm_notes ? `<div class="entry-field"><span class="field-label is-dm">DM only</span>${d.dm_notes.replace(/</g, '&lt;')}</div>` : ''}
-          </div>
-        `;
+        state.selectedNodeId = d.id;
+        renderNodeDetail(campaign);
+        document.getElementById('node-detail').scrollIntoView({ behavior: 'smooth', block: 'center' });
       });
 
       sim.on('tick', () => {
