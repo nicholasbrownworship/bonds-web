@@ -303,13 +303,15 @@
       <div class="pin"></div>
       <h1 class="board-title">Bond Web</h1>
       <p class="board-sub">The pinned-up relationship board — NPCs, factions, and the threads tying them together.</p>
-      <p class="board-stage">Stage one — the pins go up before the string does. Data entry now, the visual web comes next.</p>
+      <p class="board-stage" id="role-line"></p>
     </div>
   </div>
 
-  <div class="board">
+  <div id="role-gate"></div>
 
-    <div>
+  <div class="board" id="board-main" style="display:none;">
+
+    <div id="sidebar">
       <div id="campaign-list" class="campaign-list"></div>
       <button class="btn btn-block" id="new-campaign">+ New Campaign</button>
     </div>
@@ -371,6 +373,58 @@
         if (name) localStorage.setItem('bondweb-player-name', name);
       }
       return name || 'Anonymous';
+    }
+
+    function getRole() { return localStorage.getItem('bondweb-role'); }
+
+    function setRole(role) {
+      localStorage.setItem('bondweb-role', role);
+      renderRoleGate();
+      renderCampaignList();
+      renderEditor();
+    }
+
+    function renderRoleGate() {
+      const gate = document.getElementById('role-gate');
+      const boardMain = document.getElementById('board-main');
+      const roleLine = document.getElementById('role-line');
+      const role = getRole();
+
+      if (!role) {
+        boardMain.style.display = 'none';
+        roleLine.textContent = '';
+        gate.innerHTML = `
+          <div class="board-header" style="padding-top:0;">
+            <div class="title-card" style="max-width:420px;">
+              <div class="pin"></div>
+              <h2 class="board-title" style="font-size:22px;">Who's looking?</h2>
+              <p class="board-sub" style="font-size:17px; margin-bottom:18px;">This changes what you can see and edit.</p>
+              <div style="display:flex; gap:10px;">
+                <button class="btn" id="pick-dm">I'm the DM</button>
+                <button class="btn btn-ghost" id="pick-player">I'm a Player</button>
+              </div>
+            </div>
+          </div>
+        `;
+        document.getElementById('pick-dm').addEventListener('click', () => setRole('dm'));
+        document.getElementById('pick-player').addEventListener('click', () => setRole('player'));
+        return;
+      }
+
+      gate.innerHTML = '';
+      boardMain.style.display = '';
+      document.getElementById('new-campaign').style.display = role === 'dm' ? '' : 'none';
+      roleLine.innerHTML = `Viewing as <strong>${role === 'dm' ? 'DM' : 'Player'}</strong> &middot; <a href="#" id="switch-role" style="color:inherit;">switch</a>`;
+      document.getElementById('switch-role').addEventListener('click', (e) => {
+        e.preventDefault();
+        localStorage.removeItem('bondweb-role');
+        renderRoleGate();
+      });
+
+      if (role === 'player') {
+        state.view = 'web';
+        if (!state.selectedId && state.campaigns.length) state.selectedId = state.campaigns[0].id;
+      }
     }
 
     function setStatus(msg, isError) {
@@ -531,7 +585,7 @@
           <button class="entry-remove" id="close-detail" title="Close" style="position:absolute; top:14px; right:14px;">&times;</button>
           <div class="entry-top-row"><span class="detail-name">${(node.name || 'Untitled').replace(/</g, '&lt;')}</span></div>
           ${node.player_description ? `<div class="entry-field"><span class="field-label">Player-visible</span>${node.player_description.replace(/</g, '&lt;')}</div>` : ''}
-          ${node.dm_notes ? `<div class="entry-field"><span class="field-label is-dm">DM only (visible to everyone here for now — player view is still coming)</span>${node.dm_notes.replace(/</g, '&lt;')}</div>` : ''}
+          ${(getRole() === 'dm' && node.dm_notes) ? `<div class="entry-field"><span class="field-label is-dm">DM only</span>${node.dm_notes.replace(/</g, '&lt;')}</div>` : ''}
 
           <div class="ann-section">
             <span class="field-label">Notes &amp; theories &mdash; signed as ${(me || 'not set').replace(/</g, '&lt;')} <a href="#" id="change-name" style="color:inherit;">(change)</a></span>
@@ -614,31 +668,38 @@
     function renderEditor() {
       const wrap = document.getElementById('editor-wrap');
       const campaign = currentCampaign();
+      const role = getRole();
 
       if (!campaign) {
-        wrap.innerHTML = `<div class="empty-state">No campaign selected &mdash; create one to get started.</div>`;
+        wrap.innerHTML = `<div class="empty-state">${role === 'player' ? 'The DM hasn\'t set up a campaign yet.' : 'No campaign selected &mdash; create one to get started.'}</div>`;
         return;
       }
 
-      const view = state.view || 'board';
+      const view = role === 'player' ? 'web' : (state.view || 'board');
 
-      wrap.innerHTML = `
-        <input type="text" class="campaign-name-input" id="campaign-name" value="${(campaign.name || '').replace(/"/g, '&quot;')}">
-        <p class="status-line" id="status-line"></p>
+      const nameHtml = role === 'dm'
+        ? `<input type="text" class="campaign-name-input" id="campaign-name" value="${(campaign.name || '').replace(/"/g, '&quot;')}">`
+        : `<h2 class="campaign-name-input" style="border:none; cursor:default;">${(campaign.name || 'Untitled').replace(/</g, '&lt;')}</h2>`;
 
+      const viewTabsHtml = role === 'dm' ? `
         <div class="view-tabs">
           <div class="view-tab ${view === 'board' ? 'is-active' : ''}" data-view="board">Pin Board</div>
           <div class="view-tab ${view === 'web' ? 'is-active' : ''}" data-view="web">The Web</div>
         </div>
+      ` : '';
 
+      wrap.innerHTML = `
+        ${nameHtml}
+        <p class="status-line" id="status-line"></p>
+        ${viewTabsHtml}
         <div id="view-area"></div>
-
         <div id="node-detail"></div>
       `;
 
       renderNodeDetail(campaign);
 
-      document.getElementById('campaign-name').addEventListener('change', async (e) => {
+      if (role === 'dm') {
+        document.getElementById('campaign-name').addEventListener('change', async (e) => {
         const name = e.target.value;
         campaign.name = name;
         setStatus('Saving…');
@@ -649,7 +710,8 @@
           setStatus('Save failed — ' + err.message, true);
         }
         renderCampaignList();
-      });
+        });
+      }
 
       document.querySelectorAll('.view-tab').forEach(t => {
         t.addEventListener('click', () => {
@@ -859,31 +921,38 @@
 
     function renderWebView(campaign) {
       const area = document.getElementById('view-area');
-      const showArchived = state.showArchived;
+      const role = getRole();
+      const showArchived = role === 'dm' && state.showArchived;
 
       area.innerHTML = `
         <div class="web-toolbar">
-          <label class="check-label"><input type="checkbox" id="toggle-archived" ${showArchived ? 'checked' : ''}> Show archived</label>
+          ${role === 'dm' ? `<label class="check-label"><input type="checkbox" id="toggle-archived" ${showArchived ? 'checked' : ''}> Show archived</label>` : '<span></span>'}
           <span class="web-hint">Drag a pin to rearrange &middot; scroll to zoom &middot; click a pin for its notes</span>
         </div>
         <div class="web-stage-wrap"><svg id="web-svg"></svg></div>
       `;
 
-      document.getElementById('toggle-archived').addEventListener('change', (e) => {
-        state.showArchived = e.target.checked;
-        renderWebView(campaign);
-      });
+      if (role === 'dm') {
+        document.getElementById('toggle-archived').addEventListener('change', (e) => {
+          state.showArchived = e.target.checked;
+          renderWebView(campaign);
+        });
+      }
 
-      const nodes = state.nodes.filter(n => showArchived || !n.archived).map(n => Object.assign({}, n));
+      const nodes = state.nodes
+        .filter(n => showArchived || !n.archived)
+        .filter(n => role === 'dm' || n.visibility !== 'hidden')
+        .map(n => Object.assign({}, n));
       const nodeIds = new Set(nodes.map(n => n.id));
       const links = state.edges
         .filter(e => (showArchived || !e.archived) && nodeIds.has(e.source) && nodeIds.has(e.target))
+        .filter(e => role === 'dm' || e.visibility !== 'hidden')
         .map(e => Object.assign({}, e));
 
       const stageWrap = area.querySelector('.web-stage-wrap');
 
       if (!nodes.length) {
-        stageWrap.innerHTML = `<div class="empty-state">No pins yet &mdash; add nodes on the Pin Board first.</div>`;
+        stageWrap.innerHTML = `<div class="empty-state">${role === 'dm' ? 'No pins yet — add nodes on the Pin Board first.' : 'Nothing has been revealed here yet.'}</div>`;
         return;
       }
 
@@ -962,11 +1031,13 @@
     });
 
     (async function init() {
+      renderRoleGate();
       const wrap = document.getElementById('editor-wrap');
       wrap.innerHTML = `<div class="empty-state">Loading&hellip;</div>`;
       try {
         await refreshCampaignList();
         if (state.campaigns.length && !state.selectedId) state.selectedId = state.campaigns[0].id;
+        renderRoleGate();
         await renderAll(true);
       } catch (err) {
         wrap.innerHTML = `<div class="empty-state">Couldn't connect to Firestore &mdash; ${err.message}</div>`;
