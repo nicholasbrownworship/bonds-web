@@ -160,6 +160,36 @@
     .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 22px; flex-wrap: wrap; gap: 10px; }
     .toolbar-right { display: flex; gap: 8px; }
 
+    /* ============ VIEW SWITCHER ============ */
+    .view-tabs { display: flex; gap: 12px; margin-bottom: 22px; }
+    .view-tab {
+      font-family: var(--typewriter); font-size: 13px; color: var(--paper-dim);
+      padding: 9px 4px; cursor: pointer; border-bottom: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .view-tab.is-active { color: var(--paper); border-bottom-color: var(--string-red); }
+    .view-tab:not(.is-active):hover { color: var(--paper-dim); border-bottom-color: var(--ink-soft); }
+
+    /* ============ THE WEB (graph) ============ */
+    .web-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px; }
+    .web-hint { font-family: var(--hand); font-size: 16px; color: var(--paper-dim); }
+    .web-stage-wrap {
+      background: rgba(43,32,21,0.35); border-radius: 2px; overflow: hidden;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.35) inset;
+      margin-bottom: 20px;
+    }
+    #web-svg { display: block; cursor: grab; }
+    .pin-node { cursor: pointer; }
+    .pin-label {
+      font-family: var(--hand); font-size: 15px; fill: var(--paper); font-weight: 600;
+      paint-order: stroke; stroke: var(--cork-deep); stroke-width: 3px;
+    }
+    .link-label {
+      font-family: var(--typewriter); font-size: 8.5px; fill: var(--paper-dim);
+      text-anchor: middle; paint-order: stroke; stroke: var(--cork-deep); stroke-width: 3px;
+    }
+    #web-detail .entry-card { transform: rotate(-0.3deg); }
+
     /* ============ ENTRY CARDS (pinned notes) ============ */
     .entry-list { display: flex; flex-direction: column; gap: 26px; margin-bottom: 24px; }
     .entry-card {
@@ -277,6 +307,7 @@
   <footer>every thread leads somewhere</footer>
 
   <script type="module">
+    import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
     import {
       getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, getDocs, getDoc,
@@ -298,6 +329,7 @@
     const NODE_TYPES = ['pc', 'npc', 'faction', 'location'];
     const NODE_TYPE_LABELS = { pc: 'PC', npc: 'NPC', faction: 'Faction', location: 'Location' };
     const HUB_TYPES = ['faction', 'location'];
+    const NODE_COLORS = { pc: '#c9a25c', npc: '#e6d8b8', faction: '#9e2f28', location: '#3c5570' };
     const RELATIONSHIPS = ['ally', 'enemy', 'family', 'employer', 'debt', 'custom'];
     const RELATIONSHIP_LABELS = { ally: 'Ally', enemy: 'Enemy', family: 'Family', employer: 'Employer', debt: 'Debt', custom: 'Custom' };
 
@@ -307,6 +339,8 @@
       nodes: [],           // loaded for selected campaign
       edges: [],
       activeTab: 'nodes',
+      view: 'board',       // 'board' | 'web'
+      showArchived: false,
       loading: false,
       error: null
     };
@@ -440,6 +474,49 @@
         return;
       }
 
+      const view = state.view || 'board';
+
+      wrap.innerHTML = `
+        <input type="text" class="campaign-name-input" id="campaign-name" value="${(campaign.name || '').replace(/"/g, '&quot;')}">
+        <p class="status-line" id="status-line"></p>
+
+        <div class="view-tabs">
+          <div class="view-tab ${view === 'board' ? 'is-active' : ''}" data-view="board">Pin Board</div>
+          <div class="view-tab ${view === 'web' ? 'is-active' : ''}" data-view="web">The Web</div>
+        </div>
+
+        <div id="view-area"></div>
+      `;
+
+      document.getElementById('campaign-name').addEventListener('change', async (e) => {
+        const name = e.target.value;
+        campaign.name = name;
+        setStatus('Saving…');
+        try {
+          await updateDoc(doc(db, 'campaigns', campaign.id), { name });
+          setStatus('');
+        } catch (err) {
+          setStatus('Save failed — ' + err.message, true);
+        }
+        renderCampaignList();
+      });
+
+      document.querySelectorAll('.view-tab').forEach(t => {
+        t.addEventListener('click', () => {
+          state.view = t.dataset.view;
+          renderEditor();
+        });
+      });
+
+      if (view === 'web') {
+        renderWebView(campaign);
+      } else {
+        renderBoardView(campaign);
+      }
+    }
+
+    function renderBoardView(campaign) {
+      const area = document.getElementById('view-area');
       const tab = state.activeTab || 'nodes';
       const labels = { nodes: 'Node', edges: 'Edge' };
 
@@ -456,10 +533,7 @@
 
       const addDisabled = tab === 'edges' && state.nodes.length < 2;
 
-      wrap.innerHTML = `
-        <input type="text" class="campaign-name-input" id="campaign-name" value="${(campaign.name || '').replace(/"/g, '&quot;')}">
-        <p class="status-line" id="status-line"></p>
-
+      area.innerHTML = `
         <div class="tabs">
           <div class="tab ${tab === 'nodes' ? 'is-active' : ''}" data-tab="nodes">Nodes <span class="tab-count">${state.nodes.length}</span></div>
           <div class="tab ${tab === 'edges' ? 'is-active' : ''}" data-tab="edges">Edges <span class="tab-count">${state.edges.length}</span></div>
@@ -476,20 +550,7 @@
         ${listHtml}
       `;
 
-      document.getElementById('campaign-name').addEventListener('change', async (e) => {
-        const name = e.target.value;
-        campaign.name = name;
-        setStatus('Saving…');
-        try {
-          await updateDoc(doc(db, 'campaigns', campaign.id), { name });
-          setStatus('');
-        } catch (err) {
-          setStatus('Save failed — ' + err.message, true);
-        }
-        renderCampaignList();
-      });
-
-      document.querySelectorAll('.tab').forEach(t => {
+      area.querySelectorAll('.tab').forEach(t => {
         t.addEventListener('click', () => {
           state.activeTab = t.dataset.tab;
           renderEditor();
@@ -547,7 +608,7 @@
       });
 
       // Node field edits
-      wrap.querySelectorAll('[data-node-id]').forEach(card => {
+      area.querySelectorAll('[data-node-id]').forEach(card => {
         const id = card.dataset.nodeId;
         const node = state.nodes.find(n => n.id === id);
         if (!node) return;
@@ -590,7 +651,7 @@
       });
 
       // Edge field edits
-      wrap.querySelectorAll('[data-edge-id]').forEach(card => {
+      area.querySelectorAll('[data-edge-id]').forEach(card => {
         const id = card.dataset.edgeId;
         const edge = state.edges.find(e => e.id === id);
         if (!edge) return;
@@ -634,6 +695,102 @@
           }
           renderEditor();
         });
+      });
+    }
+
+    function renderWebView(campaign) {
+      const area = document.getElementById('view-area');
+      const showArchived = state.showArchived;
+
+      area.innerHTML = `
+        <div class="web-toolbar">
+          <label class="check-label"><input type="checkbox" id="toggle-archived" ${showArchived ? 'checked' : ''}> Show archived</label>
+          <span class="web-hint">Drag a pin to rearrange &middot; scroll to zoom &middot; click a pin for its notes</span>
+        </div>
+        <div class="web-stage-wrap"><svg id="web-svg"></svg></div>
+        <div id="web-detail"></div>
+      `;
+
+      document.getElementById('toggle-archived').addEventListener('change', (e) => {
+        state.showArchived = e.target.checked;
+        renderWebView(campaign);
+      });
+
+      const nodes = state.nodes.filter(n => showArchived || !n.archived).map(n => Object.assign({}, n));
+      const nodeIds = new Set(nodes.map(n => n.id));
+      const links = state.edges
+        .filter(e => (showArchived || !e.archived) && nodeIds.has(e.source) && nodeIds.has(e.target))
+        .map(e => Object.assign({}, e));
+
+      const stageWrap = area.querySelector('.web-stage-wrap');
+
+      if (!nodes.length) {
+        stageWrap.innerHTML = `<div class="empty-state">No pins yet &mdash; add nodes on the Pin Board first.</div>`;
+        return;
+      }
+
+      const width = stageWrap.clientWidth || 800;
+      const height = 560;
+
+      const svg = d3.select('#web-svg')
+        .attr('viewBox', [0, 0, width, height])
+        .attr('width', '100%')
+        .attr('height', height);
+
+      const g = svg.append('g');
+      svg.call(d3.zoom().scaleExtent([0.4, 3]).on('zoom', (ev) => g.attr('transform', ev.transform)));
+
+      const sim = d3.forceSimulation(nodes)
+        .force('link', d3.forceLink(links).id(d => d.id).distance(l => l.relationship === 'family' ? 70 : 120).strength(0.55))
+        .force('charge', d3.forceManyBody().strength(-260))
+        .force('center', d3.forceCenter(width / 2, height / 2))
+        .force('collide', d3.forceCollide().radius(d => (HUB_TYPES.includes(d.type) ? 34 : 22)));
+
+      const link = g.append('g').selectAll('line').data(links).join('line')
+        .attr('stroke', d => d.status === 'theory' ? 'var(--string-blue)' : 'var(--string-red)')
+        .attr('stroke-width', d => d.relationship === 'family' ? 3 : 1.8)
+        .attr('stroke-dasharray', d => d.status === 'theory' ? '5,4' : null)
+        .attr('opacity', d => d.visibility === 'hidden' ? 0.35 : 0.85);
+
+      const linkLabel = g.append('g').selectAll('text').data(links).join('text')
+        .attr('class', 'link-label')
+        .text(d => d.relationship === 'custom' ? (d.label || '') : RELATIONSHIP_LABELS[d.relationship]);
+
+      const node = g.append('g').selectAll('g').data(nodes).join('g')
+        .attr('class', 'pin-node')
+        .call(d3.drag()
+          .on('start', (ev, d) => { if (!ev.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+          .on('drag', (ev, d) => { d.fx = ev.x; d.fy = ev.y; })
+          .on('end', (ev, d) => { if (!ev.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }));
+
+      node.append('circle')
+        .attr('r', d => HUB_TYPES.includes(d.type) ? 26 : 15)
+        .attr('fill', d => NODE_COLORS[d.type] || '#c9a25c')
+        .attr('stroke', '#2b2015')
+        .attr('stroke-width', 2)
+        .attr('opacity', d => d.archived ? 0.4 : (d.visibility === 'hidden' ? 0.55 : 1));
+
+      node.append('text')
+        .attr('class', 'pin-label')
+        .attr('y', d => (HUB_TYPES.includes(d.type) ? 26 : 15) + 16)
+        .attr('text-anchor', 'middle')
+        .text(d => d.name || 'Untitled');
+
+      node.on('click', (ev, d) => {
+        const el = document.getElementById('web-detail');
+        el.innerHTML = `
+          <div class="entry-card">
+            <div class="entry-top-row"><span style="font-family:var(--hand); font-size:24px;">${(d.name || 'Untitled').replace(/</g, '&lt;')}</span></div>
+            ${d.player_description ? `<div class="entry-field"><span class="field-label">Player-visible</span>${d.player_description.replace(/</g, '&lt;')}</div>` : ''}
+            ${d.dm_notes ? `<div class="entry-field"><span class="field-label is-dm">DM only</span>${d.dm_notes.replace(/</g, '&lt;')}</div>` : ''}
+          </div>
+        `;
+      });
+
+      sim.on('tick', () => {
+        link.attr('x1', d => d.source.x).attr('y1', d => d.source.y).attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+        linkLabel.attr('x', d => (d.source.x + d.target.x) / 2).attr('y', d => (d.source.y + d.target.y) / 2);
+        node.attr('transform', d => `translate(${d.x},${d.y})`);
       });
     }
 
